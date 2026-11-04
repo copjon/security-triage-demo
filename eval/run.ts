@@ -13,7 +13,7 @@ import { parseArgs } from "node:util";
 import { DEFAULT_MODEL, findModel } from "../shared/models.ts";
 import type { Effort, TriageResult } from "../shared/schema.ts";
 import { loadTicketsFromDisk } from "../server/app.ts";
-import { triageTicket } from "../server/triage.ts";
+import { PROMPT_VERSION, triageTicket } from "../server/triage.ts";
 import { scoreTicket, summarize, type Expected, type TicketScore } from "./score.ts";
 
 const { values } = parseArgs({
@@ -37,7 +37,7 @@ const tickets = loadTicketsFromDisk().filter((t) => expected[t.id] && (!only || 
 
 // Rough upper bound so nobody starts a paid run by accident: ~4K input + ~1K output per ticket, uncached.
 const estimate = tickets.length * (4000 * model.price.input + 1000 * model.price.output) / 1_000_000;
-console.log(`${tickets.length} tickets on ${model.label}, effort ${effort}, RAG ${useRag ? "on" : "off"}. Up to ~$${estimate.toFixed(2)}.`);
+console.log(`${tickets.length} tickets on ${model.label}, effort ${effort}, RAG ${useRag ? "on" : "off"}, prompt ${PROMPT_VERSION}. Up to ~${estimate.toFixed(2)}.`);
 if (!values.yes) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await rl.question("Run it? [y/N] ");
@@ -45,6 +45,7 @@ if (!values.yes) {
   if (answer.trim().toLowerCase() !== "y") process.exit(0);
 }
 
+const startedAt = new Date();
 // First ticket alone to write the prompt cache, then 4 at a time.
 const results: TriageResult[] = [];
 const queue = [...tickets];
@@ -76,5 +77,13 @@ console.log(`\nOverall ${summary.pass}/${summary.total} (${(summary.rate * 100).
 
 mkdirSync(new URL("./results/", import.meta.url), { recursive: true });
 const file = new URL(`./results/${new Date().toISOString().replace(/[:.]/g, "-")}.json`, import.meta.url);
-writeFileSync(file, JSON.stringify({ model: model.id, effort, useRag, summary, scores, results }, null, 2));
+const wallMs = Date.now() - startedAt.getTime();
+writeFileSync(
+  file,
+  JSON.stringify(
+    { model: model.id, effort, useRag, promptVersion: PROMPT_VERSION, startedAt, wallMs, costUsd: cost, summary, scores, results },
+    null,
+    2,
+  ),
+);
 console.log(`Saved ${file.pathname}`);

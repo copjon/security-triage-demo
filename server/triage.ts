@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import {
@@ -97,6 +98,17 @@ Output length (be concise; every word costs tokens):
 - missing_info, hipaa.concerns, multi_tenancy.concerns: at most 3 items each, the most important first, each under 25 words. Only questions or concerns that would change the decision.
 - suggested_next_step: one sentence.
 - draft_response: under 50 words, professional and friendly.`;
+
+/**
+ * Short fingerprint of everything that shapes the model's instructions: the system
+ * prompt and the output schema. Eval results record it, so only runs made with the
+ * same prompt are compared.
+ */
+export const PROMPT_VERSION = createHash("sha256")
+  .update(SYSTEM_PROMPT)
+  .update(JSON.stringify(OUTPUT_FORMAT.schema))
+  .digest("hex")
+  .slice(0, 8);
 
 /** Escape text before putting it inside XML-style tags, so it can't open or close tags. */
 export function escapeXml(text: string): string {

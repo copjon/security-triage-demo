@@ -14,7 +14,8 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:functional": "vitest run tests/functional",
-    "eval": "tsx --env-file-if-exists=.env eval/run.ts"
+    "eval": "tsx --env-file-if-exists=.env eval/run.ts",
+    "eval:report": "tsx eval/report.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.4.0",
