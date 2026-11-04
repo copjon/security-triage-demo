@@ -2,11 +2,9 @@
 
 A TypeScript + React app that sends a queue of 20 security review tickets to Claude and gets each one back as schema-validated JSON: risk level, STRIDE categories, HIPAA and multi-tenant concerns, owner, missing info, policy citations and a draft reply. A knowledge base of internal policies is retrieved with BM25 (RAG), and an eval scores the output against expected labels.
 
-This README is for reviewers. It covers where to start reading, how to check the code without spending money, the design decisions behind it, and the known gaps.
+## Where to start
 
-## Review in 10 minutes
-
-Read these in order:
+The code that matters most, in reading order:
 
 | # | File | What to look for |
 |---|---|---|
@@ -42,7 +40,7 @@ To check what the model would receive without paying for a call, start the app (
 
 ## Paid vs. free
 
-Every API call costs the owner money. Review with the free checks above. Only these are paid:
+Every API call costs the owner money. The checks above are free. Only these are paid:
 
 - `npm run eval`, `POST /api/tickets/:id/triage`, `POST /api/triage-all`, and the **Triage** buttons in the UI.
 - A full 20-ticket run costs about **$0.30 on Opus 5.5** and **$0.01 on Haiku 5.5**. `npm run eval` shows the estimate and asks before it runs.
@@ -96,7 +94,7 @@ Both models were perfect on cross-tenant risk, injection detection and citation 
 
 ## Known limitations and open questions
 
-- **The labels are Claude-written.** `eval/expected.json` hasn't been reviewed by a security team, so 100% means agreement with those labels, not proof of correctness. Reviewing the labels is the most useful thing a domain reviewer can do.
+- **The labels are Claude-written.** `eval/expected.json` hasn't been reviewed by a security team, so 100% means agreement with those labels, not proof of correctness. Having a security team check them would make the scores meaningful.
 - **Small sample.** 20 tickets × 3 runs. One miss moves a run by about 1 point.
 - **The prompt is tuned for Opus 5.5 and Haiku 5.5 only.** Other models would need their own tuning and eval runs.
 - **"May contain PHI" reasoning.** The smaller models sometimes flag HIPAA on a possibility, where the prompt says "would". SEC-110's label is debatable too.
