@@ -19,6 +19,7 @@ The model's instructions are `SYSTEM_PROMPT` in `server/triage.ts` **and** the `
 - Put an exception next to the rule it modifies. Haiku ignored "unshipped designs are high, not critical" while it sat in the multi-tenant section, and followed it once it moved into the risk rubric.
 - `eval/expected.json` holds Claude-written labels. Change a label only to match a rule the owner decided, and say so.
 - A single eval run is noisy. A miss that repeats across runs is a prompt or label issue; a one-off is variance.
+- The prompt is tuned for Opus 5.5 and Haiku 5.5, and not for Sonnet 5.5. When reporting Sonnet results, say so.
 
 ## Invariants
 

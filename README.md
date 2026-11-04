@@ -87,7 +87,7 @@ npm run eval -- --only SEC-102,SEC-118 --yes    # subset, no prompt
 
 Results are saved to `eval/results/`, tagged with a fingerprint of the prompt and schema. Use it to check a prompt change, or whether `low` effort costs accuracy, before trusting a spot check.
 
-`npm run eval:report` (free) turns the saved full runs for the current prompt into accuracy, cost and speed tables per model. [MODEL-COMPARISON.md](MODEL-COMPARISON.md) is the latest write-up.
+`npm run eval:report` (free) turns the saved full runs for the current prompt into accuracy, cost and speed tables per model. [MODEL-COMPARISON.md](MODEL-COMPARISON.md) is the latest write-up. The prompt was tuned for Opus and Haiku only, not Sonnet.
 
 ## Layout
 

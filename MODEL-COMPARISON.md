@@ -2,6 +2,8 @@
 
 Three runs per model of the 20-ticket eval, all with the same prompt (version `5cf72779`), on 2026-11-04, plus three runs each of Sonnet at `medium` and `high` effort. 15 runs in total; total spend **$2.43**.
 
+> **Note:** the prompt was developed and tuned against Opus 5.5 and Haiku 5.5 only. It has not been tuned for Sonnet 5.5, so Sonnet's results below show how it does with a prompt written for the other two models, not its best achievable accuracy.
+
 ## Summary
 
 | | Opus 5.5 | Sonnet 5.5 | Haiku 5.5 |
@@ -14,7 +16,7 @@ Three runs per model of the 20-ticket eval, all with the same prompt (version `5
 
 - **Opus** was the only model with no misses in any run. It costs about 33× as much as Haiku.
 - **Haiku** came within 1 point of Opus at about 3% of the cost, and it was the fastest. Its misses were one-offs, never the same ticket twice.
-- **Sonnet** cost 18× as much as Haiku and scored lower. It also had the most serious miss of the three (see SEC-108 below). Raising its effort to `medium` or `high` didn't help (see [Sonnet effort](#sonnet-at-higher-effort)). On this task and this prompt, it's the weakest choice.
+- **Sonnet** cost 18× as much as Haiku and scored lower. It also had the most serious miss of the three (see SEC-108 below). Raising its effort to `medium` or `high` didn't help (see [Sonnet effort](#sonnet-at-higher-effort)). With this prompt, which was not tuned for Sonnet, it's the weakest choice.
 
 **Recommendation for this workload:** run **Haiku** as the first-pass triager, and send anything it rates high or critical, or flags for PHI, to **Opus** for confirmation. A human makes the final call either way. In these runs Haiku sent 14 of 20 tickets down that path (high, critical or PHI), so the blended cost would be roughly $0.009 + 14 × $0.015 ≈ **$0.22 per 20 tickets**, about 27% less than all-Opus. The saving is modest because most of this queue is serious by design; a real queue with more routine tickets would save more. The estimate hasn't been measured as a pipeline.
 
@@ -72,7 +74,7 @@ Not all misses are equal. A missed PHI flag on a possible breach matters far mor
 
 ## Sonnet at higher effort
 
-Three runs each at `medium` and `high`, same prompt and tickets.
+Three runs each at `medium` and `high`, same prompt and tickets. As above, the prompt was not tuned for Sonnet.
 
 | Sonnet 5.5 effort | Accuracy (mean) | Range | Cost / run | Avg output tokens | Avg call latency |
 |---|---|---|---|---|---|
@@ -100,7 +102,7 @@ Three runs each at `medium` and `high`, same prompt and tickets.
 - **The labels are Claude-written.** A perfect score means agreement with those labels, which isn't proof of correctness. A security team should review `eval/expected.json`.
 - **Small sample:** 20 tickets × 3 runs. One miss moves a run by about 1 point, so the Haiku–Sonnet gap (1.2 points) is suggestive, not conclusive.
 - **Effort was only varied for Sonnet.** Opus and Haiku ran at `low` only. Sonnet showed no gain at `medium` or `high`; Haiku at its default (`medium`) is untested.
-- **Prompt tuned on Opus and Haiku.** The prompt was iterated against those two models, never Sonnet, which may partly explain Sonnet's lower score.
+- **The prompt was not tuned for Sonnet.** Every prompt change was checked against Opus and Haiku only. Sonnet reads instructions more literally, and the prompt relies on inferences the other two models make (for example, that the data lake holds PHI). This likely explains much of Sonnet's lower score.
 - **Estimated costs** come from token counts at list prices, not an invoice.
 
 ## Next experiments
