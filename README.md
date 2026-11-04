@@ -102,6 +102,11 @@ Both models were perfect on cross-tenant risk, injection detection and citation 
 - **Cost figures are estimates** from token counts at list prices, and are priced at the requested model even when a fallback served the request.
 - **Single-user design.** The in-flight limits live in process memory. There's no auth, because the server is meant to run on localhost only.
 
+## TODO
+
+- [ ] **Run Claude through cloud providers: Amazon Bedrock, Google Cloud Vertex AI and Microsoft Foundry.** Each needs its own SDK client (`@anthropic-ai/bedrock-sdk`, `@anthropic-ai/vertex-sdk`, `@anthropic-ai/foundry-sdk`) and its own model ids and prices in `shared/models.ts`. Server-side `fallbacks` isn't available on these platforms, so refusal handling would need the SDK's client-side fallback middleware instead. Re-run the eval on each provider before trusting it.
+- [ ] **AuthN/AuthZ.** Add sign-in (for example OIDC through the company IdP) and roles. Only the people who own a queue should be able to start paid triage, and the API shouldn't bind beyond `127.0.0.1` until this is in place. Spend limits would then become per-user and shared across instances, instead of in-memory counters.
+
 ## Run it
 
 Requires Node 22.9 or later.
