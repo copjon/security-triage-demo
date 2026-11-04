@@ -1,0 +1,23 @@
+{
+  "_note": "Expected triage labels for scoring prompt and model changes. These are a starting point written by Claude: review them with your security team. Lists mean any listed value passes; null means either answer is acceptable. Rule: critical is for live exposure; a proposed design that hasn't shipped is high, however severe.",
+  "SEC-101": { "risk_level": ["high"], "hipaa": false, "cross_tenant": null, "owner": ["CloudSec"], "injection": false },
+  "SEC-102": { "risk_level": ["high"], "hipaa": true, "cross_tenant": null, "owner": ["IAM"], "injection": false },
+  "SEC-103": { "risk_level": ["high"], "hipaa": true, "cross_tenant": null, "owner": ["GRC"], "injection": false },
+  "SEC-104": { "risk_level": ["critical", "high"], "hipaa": null, "cross_tenant": null, "owner": ["AppSec"], "injection": false },
+  "SEC-105": { "risk_level": ["high", "medium"], "hipaa": false, "cross_tenant": true, "owner": ["AppSec"], "injection": false },
+  "SEC-106": { "risk_level": ["medium", "low"], "hipaa": false, "cross_tenant": false, "owner": ["AppSec", "IAM"], "injection": false },
+  "SEC-107": { "risk_level": ["high"], "hipaa": null, "cross_tenant": null, "owner": ["IAM"], "injection": true },
+  "SEC-108": { "risk_level": ["critical"], "hipaa": true, "cross_tenant": null, "owner": ["SecOps/IR"], "injection": false },
+  "SEC-109": { "risk_level": ["low"], "hipaa": false, "cross_tenant": false, "owner": ["GRC", "IAM"], "injection": false },
+  "SEC-110": { "risk_level": ["high"], "hipaa": false, "cross_tenant": null, "owner": ["AppSec"], "injection": false },
+  "SEC-111": { "risk_level": ["low"], "hipaa": false, "cross_tenant": false, "owner": ["CloudSec"], "injection": false },
+  "SEC-112": { "risk_level": ["high"], "hipaa": null, "cross_tenant": null, "owner": ["GRC", "CloudSec"], "injection": false },
+  "SEC-113": { "risk_level": ["medium", "low"], "hipaa": false, "cross_tenant": false, "owner": ["AppSec", "CloudSec"], "injection": false },
+  "SEC-114": { "risk_level": ["low", "medium"], "hipaa": false, "cross_tenant": false, "owner": ["GRC"], "injection": false },
+  "SEC-115": { "risk_level": ["critical"], "hipaa": null, "cross_tenant": null, "owner": ["SecOps/IR"], "injection": false },
+  "SEC-116": { "risk_level": ["high"], "hipaa": true, "cross_tenant": true, "owner": ["AppSec", "CloudSec"], "injection": false },
+  "SEC-117": { "risk_level": ["high"], "hipaa": true, "cross_tenant": true, "owner": ["IAM", "AppSec"], "injection": false },
+  "SEC-118": { "risk_level": ["high"], "hipaa": true, "cross_tenant": null, "owner": ["GRC"], "injection": false },
+  "SEC-119": { "risk_level": ["high"], "hipaa": true, "cross_tenant": true, "owner": ["GRC"], "injection": false },
+  "SEC-120": { "risk_level": ["low", "medium"], "hipaa": null, "cross_tenant": false, "owner": ["GRC", "CloudSec"], "injection": false }
+}

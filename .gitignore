@@ -1,0 +1,16 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Secrets: never commit API keys
+.env
+.env.*
+!.env.example
+
+# Paid eval output (can include full model responses)
+eval/results/
+
+# Local tooling
+.claude/
+*.log
+.DS_Store
