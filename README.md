@@ -106,6 +106,14 @@ Both models were perfect on cross-tenant risk, injection detection and citation 
 
 - [ ] **Run Claude through cloud providers: Amazon Bedrock, Google Cloud Vertex AI and Microsoft Foundry.** Each needs its own SDK client (`@anthropic-ai/bedrock-sdk`, `@anthropic-ai/vertex-sdk`, `@anthropic-ai/foundry-sdk`) and its own model ids and prices in `shared/models.ts`. Server-side `fallbacks` isn't available on these platforms, so refusal handling would need the SDK's client-side fallback middleware instead. Re-run the eval on each provider before trusting it.
 - [ ] **AuthN/AuthZ.** Add sign-in (for example OIDC through the company IdP) and roles. Only the people who own a queue should be able to start paid triage, and the API shouldn't bind beyond `127.0.0.1` until this is in place. Spend limits would then become per-user and shared across instances, instead of in-memory counters.
+- [ ] **Have a security team review `eval/expected.json`.** Until then, accuracy only measures agreement with Claude-written labels.
+- [ ] **Redact before sending.** Scrub credentials, tokens and patient identifiers from ticket text before `buildUserPrompt` (SEC-108, for example, contains a leaked key). Add a test showing that redacted values never reach the request.
+- [ ] **Haiku first, Opus to confirm.** Haiku triages everything and escalates anything high, critical or flagged for PHI to Opus. [`MODEL-COMPARISON.md`](MODEL-COMPARISON.md) estimates about 27% less than all-Opus; build it and measure the real cost and whether Opus overturns Haiku's misses.
+- [ ] **Message Batches API for "Triage all".** About half the price, with results arriving within hours instead of streaming. A good fit for overnight queues.
+- [ ] **Persist results and an audit log.** Today results live only in the browser session. Store each triage with its model, prompt version, retrieved excerpts, cost and who started it, so any decision can be traced.
+- [ ] **Fix known prompt and retrieval gaps.** Tighten the HIPAA "would, not may" wording, decide SEC-110's label, and make sure the Datadog BAA entry is retrieved for it. Re-run the eval on the affected tickets after each change.
+- [ ] **Integrate with a ticketing system** (Jira, ServiceNow): pull the queue and post draft replies back, with a person approving each one.
+- [ ] **Observability.** OpenTelemetry traces for latency, token use, cost, refusals and fallbacks once it runs beyond one machine.
 
 ## Run it
 
