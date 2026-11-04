@@ -19,13 +19,8 @@ export const MODELS: ModelOption[] = [
     price: { input: 4, cacheWrite: 5, cacheRead: 0.2, output: 20 },
     supportsFallback: true,
   },
-  {
-    id: "claude-sonnet-5-5",
-    label: "Claude Sonnet 5.5",
-    note: "Balanced, half the price",
-    price: { input: 2, cacheWrite: 2.5, cacheRead: 0.2, output: 10 },
-    supportsFallback: true,
-  },
+  // Claude Sonnet 5.5 was removed after MODEL-COMPARISON.md: with this prompt (tuned for
+  // Opus and Haiku, not Sonnet) it scored below Haiku at 18x the cost.
   {
     id: "claude-haiku-5-5",
     label: "Claude Haiku 5.5",

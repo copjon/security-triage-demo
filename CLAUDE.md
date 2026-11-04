@@ -9,7 +9,7 @@ Every Anthropic API call costs the owner money. Sort every action into one of tw
 - **Free:** `npm run typecheck`, `npm test` (all three layers use the fake client in `tests/helpers.ts`), `npm run build`, the `/api/tickets/:id/prompt` preview, and retrieval.
 - **Paid:** `npm run eval`, `POST /api/tickets/:id/triage`, `POST /api/triage-all`, and "Triage" buttons in the UI.
 
-Verify with free checks first. For a paid check, use `npm run eval -- --only <ids> --yes` on the 2–3 tickets the change affects, and state the cost. Ask the owner before any full-queue or repeated run. Rough cost per full 20-ticket run: Opus ~$0.30, Sonnet ~$0.15, Haiku ~$0.01.
+Verify with free checks first. For a paid check, use `npm run eval -- --only <ids> --yes` on the 2–3 tickets the change affects, and state the cost. Ask the owner before any full-queue or repeated run. Rough cost per full 20-ticket run: Opus ~$0.30, Haiku ~$0.01.
 
 ## Changing the prompt
 
@@ -19,7 +19,7 @@ The model's instructions are `SYSTEM_PROMPT` in `server/triage.ts` **and** the `
 - Put an exception next to the rule it modifies. Haiku ignored "unshipped designs are high, not critical" while it sat in the multi-tenant section, and followed it once it moved into the risk rubric.
 - `eval/expected.json` holds Claude-written labels. Change a label only to match a rule the owner decided, and say so.
 - A single eval run is noisy. A miss that repeats across runs is a prompt or label issue; a one-off is variance.
-- The prompt is tuned for Opus 5.5 and Haiku 5.5, and not for Sonnet 5.5. When reporting Sonnet results, say so.
+- The prompt is tuned for Opus 5.5 and Haiku 5.5, not Sonnet 5.5. Sonnet was removed from `shared/models.ts` for that reason (see MODEL-COMPARISON.md); re-adding it means tuning the prompt for it first.
 
 ## Invariants
 

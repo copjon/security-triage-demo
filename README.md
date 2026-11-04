@@ -50,7 +50,7 @@ All of it is in [`server/triage.ts`](server/triage.ts):
   - the system prompt marked with `cache_control`, so it's cached after the first ticket
   - `output_config.format: betaZodOutputFormat(TriageSchema)` for structured output
   - `output_config.effort: "low"`
-  - `fallbacks: "default"` (Opus and Sonnet): if a safety classifier declines a ticket (possible with exploit details), the API retries it on a recommended fallback model
+  - `fallbacks: "default"` (Opus only; Haiku doesn't offer it): if a safety classifier declines a ticket (possible with exploit details), the API retries it on a recommended fallback model
 
 ## RAG
 
@@ -87,7 +87,7 @@ npm run eval -- --only SEC-102,SEC-118 --yes    # subset, no prompt
 
 Results are saved to `eval/results/`, tagged with a fingerprint of the prompt and schema. Use it to check a prompt change, or whether `low` effort costs accuracy, before trusting a spot check.
 
-`npm run eval:report` (free) turns the saved full runs for the current prompt into accuracy, cost and speed tables per model. [MODEL-COMPARISON.md](MODEL-COMPARISON.md) is the latest write-up. The prompt was tuned for Opus and Haiku only, not Sonnet.
+`npm run eval:report` (free) turns the saved full runs for the current prompt into accuracy, cost and speed tables per model. [MODEL-COMPARISON.md](MODEL-COMPARISON.md) is the latest write-up. The prompt was tuned for Opus and Haiku only, not Sonnet, so Sonnet was removed as an option.
 
 ## Layout
 

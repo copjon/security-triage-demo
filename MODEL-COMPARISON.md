@@ -3,6 +3,8 @@
 Three runs per model of the 20-ticket eval, all with the same prompt (version `5cf72779`), on 2026-11-04, plus three runs each of Sonnet at `medium` and `high` effort. 15 runs in total; total spend **$2.43**.
 
 > **Note:** the prompt was developed and tuned against Opus 5.5 and Haiku 5.5 only. It has not been tuned for Sonnet 5.5, so Sonnet's results below show how it does with a prompt written for the other two models, not its best achievable accuracy.
+>
+> **Sonnet 5.5 has since been removed as an option in the app** (`shared/models.ts`), based on these results. Its numbers are kept here for reference. Re-adding it would mean tuning the prompt for it first.
 
 ## Summary
 
@@ -108,15 +110,15 @@ Three runs each at `medium` and `high`, same prompt and tickets. As above, the p
 ## Next experiments
 
 1. ~~Sonnet at `medium` and `high` effort~~: done, no gain (see above).
-2. **Fix the SEC-108 inference gap:** add "the data lake holds tenant PHI" to the knowledge base, or state that assumption in the prompt, and re-run Sonnet (about $0.17 per run).
+2. **Fix the SEC-108 inference gap** (only needed if Sonnet is re-added): add "the data lake holds tenant PHI" to the knowledge base, or state that assumption in the prompt.
 3. **A measured Haiku → Opus pipeline**, to confirm the blended cost and that Opus overturns Haiku's misses.
 4. **SEC-110:** decide whether the HIPAA label should be "either", and lower the retrieval threshold so the Datadog BAA entry is retrieved.
-5. **Tighten the HIPAA wording** ("only if the request itself would…, not may") and re-run Sonnet and Haiku.
+5. **Tighten the HIPAA wording** ("only if the request itself would…, not may") and re-run Haiku.
 
 ## Reproduce
 
 ```bash
 npm run eval -- --model claude-opus-5-5 --yes     # repeat per model and run
-npm run eval -- --model claude-sonnet-5-5 --effort high --yes
-npm run eval:report                               # free: tables for the current prompt version
+# Sonnet runs need claude-sonnet-5-5 added back to shared/models.ts
+npm run eval:report                               # free: tables for the current prompt version (Sonnet rows show its model id)
 ```
