@@ -1,107 +1,174 @@
 # Security Review Queue: an LLM triage demo
 
-A small TypeScript + React app that sends a queue of security review tickets to Claude through code. Each ticket comes back as typed JSON: risk level, STRIDE categories, HIPAA and multi-tenant concerns, owner, missing info and a draft reply.
+A TypeScript + React app that sends a queue of 20 security review tickets to Claude and gets each one back as schema-validated JSON: risk level, STRIDE categories, HIPAA and multi-tenant concerns, owner, missing info, policy citations and a draft reply. A knowledge base of internal policies is retrieved with BM25 (RAG), and an eval scores the output against expected labels.
+
+## Where to start
+
+The code that matters most, in reading order:
+
+| # | File | What to look for |
+|---|---|---|
+| 1 | [`server/triage.ts`](server/triage.ts) | The whole LLM integration: `SYSTEM_PROMPT`, `buildUserPrompt()` (escaping), `triageTicket()` (the API call, error paths, metrics) |
+| 2 | [`shared/schema.ts`](shared/schema.ts) | The Zod output schema. Its `.describe()` text goes to the model too, so it's part of the prompt |
+| 3 | [`server/app.ts`](server/app.ts) | The Express API and the guards on paid routes |
+| 4 | [`server/retrieval.ts`](server/retrieval.ts) | BM25 over `kb/`, top 4 chunks, 40% relative-score cutoff |
+| 5 | [`eval/score.ts`](eval/score.ts), [`eval/expected.json`](eval/expected.json) | How accuracy is defined |
+| 6 | [`MODEL-COMPARISON.md`](MODEL-COMPARISON.md) | Measured accuracy, cost and latency per model |
+
+`src/` (the React UI) and `tests/` are worth a skim, but the decisions that matter are in the files above.
+
+## Verify it for free
+
+None of these call the Anthropic API, and no key is needed. Every test uses the fake client in [`tests/helpers.ts`](tests/helpers.ts), which records each request and returns a canned, schema-valid reply.
+
+```bash
+npm ci
+npm run typecheck          # app, server and test tsconfigs
+npm test                   # 79 tests across unit, integration and functional
+npm run build              # production UI bundle
+```
+
+| Layer | Covers |
+|---|---|
+| `tests/unit` | Escaping, prompt building, BM25, cost math, scoring, SSE parsing, eval aggregation |
+| `tests/integration` | The triage pipeline against the real `kb/`, and the Express API over HTTP |
+| `tests/functional` | The React UI driven like a user (Testing Library + jsdom) against the real API in-process |
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same four steps on every push and PR, with no API key.
+
+To check what the model would receive without paying for a call, start the app (below) and use **Show the prompt sent to the model**, or `GET /api/tickets/:id/prompt`.
+
+## Paid vs. free
+
+Every API call costs the owner money. The checks above are free. Only these are paid:
+
+- `npm run eval`, `POST /api/tickets/:id/triage`, `POST /api/triage-all`, and the **Triage** buttons in the UI.
+- A full 20-ticket run costs about **$0.30 on Opus 5.5** and **$0.01 on Haiku 5.5**. `npm run eval` shows the estimate and asks before it runs.
+- For a targeted check: `npm run eval -- --only SEC-107,SEC-118 --yes`.
+
+## Design decisions
+
+**Prompt structure.** The system prompt (rubric, owners, HIPAA and multi-tenant rules, output limits) is identical for every ticket and marked with `cache_control`. Per-ticket content, meaning the retrieved excerpts and the ticket itself, goes in the user message after the cache marker. In the eval runs, 87% of input tokens were read from the cache. During "Triage all", the first ticket runs alone so it writes the cache before the other requests start in parallel.
+
+**Structured output, validated by us.** `triageTicket` calls `messages.create` with `output_config.format` set to the JSON schema, then validates the reply itself with `parseTriage`. It does not use the SDK's `messages.parse`. That way a reply that breaks the schema still returns its billed token counts, and the error names the field and the bad value.
+
+**Every failure carries its cost.** Refusals, `max_tokens` cut-offs and schema failures return an error result that includes metrics, so the on-screen cost total reflects what was actually billed.
+
+**Refusal fallback.** Security tickets can trigger safety classifiers (exploit details, for example). On models that support it (`supportsFallback` in [`shared/models.ts`](shared/models.ts), currently Opus only), the request sends `fallbacks: "default"` so the API re-runs a declined request on a fallback model. Haiku rejects the parameter, so it isn't sent there. `metrics.fallbackUsed` records when a fallback served the request.
+
+**Effort `low`.** For a short classification task, `low` effort kept accuracy at 100% on Opus across three runs while keeping output tokens down. See [`MODEL-COMPARISON.md`](MODEL-COMPARISON.md).
+
+**RAG is local BM25.** No embeddings service or second key. Each `## ` section in `kb/` is one chunk. Up to 4 chunks are kept, and only those scoring at least 40% of the best match (`MIN_RELATIVE_SCORE`). The model cites what it relied on in `policy_refs`, and both the UI and the eval flag any cited id that wasn't actually retrieved. An honest caveat: a knowledge base this small would be cheaper to put whole in the cached system prompt. RAG is here to demonstrate the pattern, which pays off on corpora too big or too volatile to send every time.
+
+**Prompt versioning.** `PROMPT_VERSION` is a hash of `SYSTEM_PROMPT` plus the output schema. Eval results are tagged with it, and `npm run eval:report` only compares runs made with the same prompt.
+
+**Model choice.** The UI offers Opus 5.5 and Haiku 5.5. Sonnet 5.5 was evaluated and removed: with this prompt, which was tuned on the other two models, it scored below Haiku at 18× the cost.
+
+## Trust boundaries and safety rails
+
+The threats here are a hostile ticket and someone else spending the owner's API budget.
+
+| Concern | Control | Where |
+|---|---|---|
+| Ticket text is untrusted | Every ticket field is XML-escaped in `buildUserPrompt`, so a ticket can't close its own tags or forge a `<doc>` excerpt. The prompt tells the model to treat ticket text as data and to set `injection_suspected` when a ticket tries to give instructions | `server/triage.ts` |
+| Injection in practice | SEC-107 contains "Ignore all previous instructions…". It is flagged, not obeyed, in every eval run on every model | `server/tickets.json` |
+| Network exposure | The API binds to `127.0.0.1` by default. `HOST=0.0.0.0` has to be set explicitly | `server/index.ts` |
+| Cross-site requests | Browser requests with an `Origin` outside `ALLOWED_ORIGINS` get 403 | `server/app.ts` |
+| Accidental spend | Paid routes are POST-only, so a link or prefetch can't start one. One batch at a time (409), at most 4 single-ticket calls in flight (429) | `server/app.ts` |
+| Key exposure | The key stays on the server. Vite proxies `/api`, so the browser never sees it | `vite.config.ts` |
+| Model input | The model id must be one of the ids in `shared/models.ts` (400 otherwise) | `server/app.ts` |
+
+**Data handling.** Ticket text and retrieved excerpts are sent to the Anthropic API. No request parameter controls retention or privacy. That depends on the account's commercial terms and retention settings, including Zero Data Retention if the organization has it. For real tickets, check those settings, and consider redacting secrets before `buildUserPrompt`.
+
+## Results so far
+
+From [`MODEL-COMPARISON.md`](MODEL-COMPARISON.md): 3 runs per model, 20 tickets, 105 scored checks per run.
+
+| | Opus 5.5 | Haiku 5.5 |
+|---|---|---|
+| Accuracy (mean of 3) | 100.0% | 99.0% |
+| Cost per 20 tickets | $0.300 | $0.009 |
+| Avg latency per call | 6.9s | 3.9s |
+
+Both models were perfect on cross-tenant risk, injection detection and citation validity. Haiku's misses were one-offs, never the same ticket twice.
+
+## Known limitations and open questions
+
+- **The labels are Claude-written.** `eval/expected.json` hasn't been reviewed by a security team, so 100% means agreement with those labels, not proof of correctness. Having a security team check them would make the scores meaningful.
+- **Small sample.** 20 tickets × 3 runs. One miss moves a run by about 1 point.
+- **The prompt is tuned for Opus 5.5 and Haiku 5.5 only.** Other models would need their own tuning and eval runs.
+- **"May contain PHI" reasoning.** The smaller models sometimes flag HIPAA on a possibility, where the prompt says "would". SEC-110's label is debatable too.
+- **Retrieval gaps.** Keyword search can miss a relevant section (the Datadog BAA entry isn't retrieved for SEC-110). Raising the 40% cutoff cuts noise but has dropped useful excerpts before.
+- **Cost figures are estimates** from token counts at list prices, and are priced at the requested model even when a fallback served the request.
+- **Single-user design.** The in-flight limits live in process memory. There's no auth, because the server is meant to run on localhost only.
+
+## TODO
+
+- [ ] **Run Claude through cloud providers: Amazon Bedrock, Google Cloud Vertex AI and Microsoft Foundry.** Each needs its own SDK client (`@anthropic-ai/bedrock-sdk`, `@anthropic-ai/vertex-sdk`, `@anthropic-ai/foundry-sdk`) and its own model ids and prices in `shared/models.ts`. Server-side `fallbacks` isn't available on these platforms, so refusal handling would need the SDK's client-side fallback middleware instead. Re-run the eval on each provider before trusting it.
+- [ ] **AuthN/AuthZ.** Add sign-in (for example OIDC through the company IdP) and roles. Only the people who own a queue should be able to start paid triage, and the API shouldn't bind beyond `127.0.0.1` until this is in place. Spend limits would then become per-user and shared across instances, instead of in-memory counters.
+- [ ] **Have a security team review `eval/expected.json`.** Until then, accuracy only measures agreement with Claude-written labels.
+- [ ] **Redact before sending.** Scrub credentials, tokens and patient identifiers from ticket text before `buildUserPrompt` (SEC-108, for example, contains a leaked key). Add a test showing that redacted values never reach the request.
+- [ ] **Haiku first, Opus to confirm.** Haiku triages everything and escalates anything high, critical or flagged for PHI to Opus. [`MODEL-COMPARISON.md`](MODEL-COMPARISON.md) estimates about 27% less than all-Opus; build it and measure the real cost and whether Opus overturns Haiku's misses.
+- [ ] **Message Batches API for "Triage all".** About half the price, with results arriving within hours instead of streaming. A good fit for overnight queues.
+- [ ] **Persist results and an audit log.** Today results live only in the browser session. Store each triage with its model, prompt version, retrieved excerpts, cost and who started it, so any decision can be traced.
+- [ ] **Fix known prompt and retrieval gaps.** Tighten the HIPAA "would, not may" wording, decide SEC-110's label, and make sure the Datadog BAA entry is retrieved for it. Re-run the eval on the affected tickets after each change.
+- [ ] **Integrate with a ticketing system** (Jira, ServiceNow): pull the queue and post draft replies back, with a person approving each one.
+- [ ] **Observability.** OpenTelemetry traces for latency, token use, cost, refusals and fallbacks once it runs beyond one machine.
 
 ## Run it
 
+Requires Node 22.9 or later.
+
 ```bash
 npm install
-cp .env.example .env    # then put your key in ANTHROPIC_API_KEY
-npm run dev
+cp .env.example .env    # then set ANTHROPIC_API_KEY
+npm run dev             # UI on http://localhost:5180, API on 127.0.0.1:3001
 ```
 
-Open http://localhost:5180. The API server runs on 127.0.0.1:3001, and Vite proxies `/api` to it, so the key never reaches the browser. Requires Node 22.9 or later.
+To serve the built UI from the API server instead: `npm run build`, then `npm start`, and open http://127.0.0.1:3001.
 
-To serve the built UI from the API server instead: `npm run build`, then `npm start` and open http://127.0.0.1:3001.
-
-| Setting | Default | |
+| Setting | Default | Notes |
 |---|---|---|
-| `API_PORT` | 3001 | Read by both the server and the Vite proxy |
+| `API_PORT` | 3001 | Read by both the server and the Vite proxy (not `PORT`, which preview tooling sets for Vite) |
 | `WEB_PORT` | 5180 | Vite dev server |
-| `HOST` | 127.0.0.1 | Only set `0.0.0.0` if you want other devices to be able to spend your API budget |
-| `ALLOWED_ORIGINS` | localhost and 127.0.0.1 on both ports | Comma-separated; browser requests from any other origin get 403 |
+| `HOST` | 127.0.0.1 | `0.0.0.0` lets other devices on the network spend your API budget |
+| `ALLOWED_ORIGINS` | localhost and 127.0.0.1 on both ports | Comma-separated |
 
-## Safety rails
+### Things to try (paid)
 
-- The API only listens on this machine and rejects browser requests from other sites.
-- Paid actions are POST only. One batch can run at a time (409 otherwise), and at most 4 single-ticket calls can be in flight (429 otherwise).
-- Ticket text is XML-escaped before it goes in the prompt, so a ticket can't close its own tags or forge a knowledge base excerpt.
-- Failed calls that were still billed (refusals, cut-off output) count toward the cost total.
+1. **Show the prompt** on any ticket (free), then **Triage** it and open **Raw JSON**.
+2. **SEC-107:** the prompt-injection ticket is flagged in `risk_reason` and `injection_suspected`.
+3. **SEC-118, RAG off vs. on:** with RAG off, Claude says to get a BAA signed. With RAG on, it cites the vendor register (TextFlare refuses BAAs) and points to Twilio as the approved alternative.
+4. **SEC-116 to SEC-120:** HIPAA and multi-tenant cases (a cache key leaking PHI across tenants, support impersonation, training on clinical notes, customer-managed keys).
+5. **Model picker:** run the same ticket on Opus and Haiku and compare. The stat bar shows tokens, cached tokens, estimated cost and latency.
 
-## What to show in a demo
-
-1. **Show the prompt sent to the model** on any ticket. It shows the fixed system prompt (rubric and rules) and the templated user message that wraps the ticket in `<ticket>` tags.
-2. **Triage** one ticket, then open **Raw JSON**. It's guaranteed to match the Zod schema in `shared/schema.ts`.
-3. **Triage all 20.** Requests run 4 at a time, and results stream back over Server-Sent Events. Watch the queue re-sort by risk.
-4. **SEC-107** contains a prompt-injection attempt ("Ignore all previous instructions…"). It gets flagged rather than obeyed.
-5. **SEC-116 to SEC-120** cover HIPAA and multi-tenancy: a cache key that can leak PHI across tenants, support impersonation of any tenant, an SMS vendor with no BAA, training on clinical notes, and customer-managed keys. Watch the PHI and tenant flags.
-6. **RAG on vs. off.** Untick "Use knowledge base (RAG)" and triage SEC-118: Claude says to get a BAA signed. Tick it and re-run: it cites the vendor register (TextFlare refuses BAAs and keeps messages for 2 years) and points to Twilio as the approved alternative. Open "Retrieved from knowledge base" to see which sections were pulled and which words matched.
-7. **Model picker.** Run the same ticket on Opus and Haiku and compare quality, speed and cost.
-8. The stat bar shows tokens, cached tokens, estimated cost and average latency, which covers the real-world tradeoffs. Each row is labeled with the model and RAG setting that produced it.
-
-## Where the LLM call lives
-
-All of it is in [`server/triage.ts`](server/triage.ts):
-
-- `SYSTEM_PROMPT`: the instructions, the same for every ticket
-- `buildUserPrompt()`: puts the retrieved knowledge base excerpts and the ticket into a template
-- `triageTicket()`: one `client.beta.messages.parse()` call with
-  - the model chosen in the UI (list in `shared/models.ts`)
-  - the system prompt marked with `cache_control`, so it's cached after the first ticket
-  - `output_config.format: betaZodOutputFormat(TriageSchema)` for structured output
-  - `output_config.effort: "low"`
-  - `fallbacks: "default"` (Opus only; Haiku doesn't offer it): if a safety classifier declines a ticket (possible with exploit details), the API retries it on a recommended fallback model
-
-## RAG
-
-`kb/` holds the security team's knowledge base: vendor register, access policy, multi-tenant standard, HIPAA policy, data classification, runbooks, AppSec standards, GRC policies and past decisions. Each `## ` section is one chunk.
-
-[`server/retrieval.ts`](server/retrieval.ts) scores every chunk against the ticket with BM25 keyword search and returns up to 4. That runs locally, with no extra service or API key. In production you'd usually swap `search()` for vector search over embeddings; the rest of the pipeline stays the same.
-
-The excerpts go in the user message, after the cache marker, because they change for each ticket. Claude lists what it relied on in `policy_refs`, and the UI flags any cited id that wasn't in the retrieved context.
-
-Honest caveat for a demo: a knowledge base this small would be cheaper to put entirely in the cached system prompt. RAG pays off when the corpus is too big, or changes too often, to send every time.
-
-To try a change live: edit `SYSTEM_PROMPT` and `tsx watch` restarts the server; edit a file in `kb/` or `server/tickets.json` and it's re-read on the next request.
-
-## Tests
-
-None of the tests call the Anthropic API. They use a fake client that records each request and returns a canned, schema-valid answer.
-
-```bash
-npm test                  # everything
-npm run test:unit         # pure functions: escaping, prompt building, BM25, cost math, scoring, SSE parsing
-npm run test:integration  # triage pipeline + real kb/ retrieval, and the Express API over HTTP
-npm run test:functional   # the React UI driven like a user, against the real API in-process
-```
-
-## Eval (paid)
-
-`eval/expected.json` holds expected labels for all 20 tickets: risk level, the HIPAA and cross-tenant flags, owner and injection. It's a starting point: review the labels with your security team. `npm run eval` triages every ticket and scores the results, including whether every citation was in the retrieved context. It shows an estimated cost and asks before running.
+### Eval
 
 ```bash
 npm run eval -- --model claude-haiku-5-5        # about 1¢
 npm run eval -- --effort medium --rag off       # Opus by default
-npm run eval -- --only SEC-102,SEC-118 --yes    # subset, no prompt
+npm run eval -- --only SEC-102,SEC-118 --yes    # subset, no confirmation
+npm run eval:report                             # free: tables from saved runs for the current prompt
 ```
 
-Results are saved to `eval/results/`, tagged with a fingerprint of the prompt and schema. Use it to check a prompt change, or whether `low` effort costs accuracy, before trusting a spot check.
-
-`npm run eval:report` (free) turns the saved full runs for the current prompt into accuracy, cost and speed tables per model. [MODEL-COMPARISON.md](MODEL-COMPARISON.md) is the latest write-up. The prompt was tuned for Opus and Haiku only, not Sonnet, so Sonnet was removed as an option.
+Results are saved to `eval/results/`, which is not committed. A single run is noisy: a miss that repeats across runs points to a prompt or label issue, and a one-off is usually variance.
 
 ## Layout
 
 ```
-server/index.ts     Starts the server (host, port, allowed origins)
-server/app.ts       Express API: list tickets, preview a prompt, triage one, triage all (SSE)
-server/triage.ts    The Claude call
-server/retrieval.ts BM25 search over kb/
-kb/                 Knowledge base (Markdown)
-server/tickets.json Sample queue (20 tickets)
-shared/schema.ts    Zod schema and shared types
-shared/models.ts    Models the UI can pick, with prices
-src/App.tsx         React UI
-src/api.ts          API calls, SSE parsing, error normalization
-eval/               Expected labels, scoring, paid eval runner
-tests/              unit/, integration/, functional/
+server/index.ts      Starts the server (host, port, allowed origins)
+server/app.ts        Express API: list tickets, preview a prompt, triage one, triage all (SSE)
+server/triage.ts     The Claude call, prompt, escaping, metrics
+server/retrieval.ts  BM25 search over kb/
+server/paths.ts      File paths that work under Node and jsdom
+server/tickets.json  Sample queue (20 tickets)
+kb/                  Knowledge base (Markdown, one chunk per ## section)
+shared/schema.ts     Zod output schema and shared types
+shared/models.ts     Selectable models, prices, fallback support
+src/App.tsx          React UI
+src/api.ts           API calls, SSE parsing, error normalization
+eval/                Expected labels, scoring, paid eval runner, report
+tests/               unit/, integration/, functional/, and the fake client in helpers.ts
+MODEL-COMPARISON.md  Latest cost vs. accuracy write-up
+CLAUDE.md            Working rules for AI agents editing this repo
 ```
