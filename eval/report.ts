@@ -34,33 +34,38 @@ if (!runs.length) {
 }
 
 const stats = aggregate(runs).sort((a, b) => b.costPerRun - a.costPerRun);
+// Show effort and RAG only when runs differ in them, so the common case stays short.
+const showEffort = new Set(stats.map((s) => s.effort)).size > 1;
+const showRag = new Set(stats.map((s) => s.rag)).size > 1;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const usd = (x: number, d = 3) => `$${x.toFixed(d)}`;
-const name = (id: string) => findModel(id)?.label ?? id;
+const modelName = (id: string) => findModel(id)?.label ?? id;
+const label = (s: { model: string; effort: string; rag: boolean }) =>
+  [modelName(s.model), showEffort && `${s.effort} effort`, showRag && (s.rag ? "RAG" : "no RAG")].filter(Boolean).join(" · ");
 
 console.log(`Prompt version: ${values.prompt} · ${runs.length} full runs\n`);
 console.log("| Model | Runs | Accuracy (mean) | Range | Perfect runs | Cost / run | Cost / ticket | Avg call latency | Avg run time | Errors |");
 console.log("|---|---|---|---|---|---|---|---|---|---|");
 for (const s of stats) {
   console.log(
-    `| ${name(s.model)} | ${s.runs} | ${pct(s.accuracy.mean)} | ${pct(s.accuracy.min)}–${pct(s.accuracy.max)} | ${s.perfectRuns}/${s.runs} | ${usd(s.costPerRun)} | ${usd(s.costPerTicket, 4)} | ${(s.avgLatencyMs / 1000).toFixed(1)}s | ${(s.avgWallMs / 1000).toFixed(0)}s | ${s.errors} |`,
+    `| ${label(s)} | ${s.runs} | ${pct(s.accuracy.mean)} | ${pct(s.accuracy.min)}–${pct(s.accuracy.max)} | ${s.perfectRuns}/${s.runs} | ${usd(s.costPerRun)} | ${usd(s.costPerTicket, 4)} | ${(s.avgLatencyMs / 1000).toFixed(1)}s | ${(s.avgWallMs / 1000).toFixed(0)}s | ${s.errors} |`,
   );
 }
 
 console.log("\n| Model | " + CHECKS.join(" | ") + " |");
 console.log("|---|" + CHECKS.map(() => "---").join("|") + "|");
 for (const s of stats) {
-  console.log(`| ${name(s.model)} | ` + CHECKS.map((c) => `${s.byCheck[c].pass}/${s.byCheck[c].total}`).join(" | ") + " |");
+  console.log(`| ${label(s)} | ` + CHECKS.map((c) => `${s.byCheck[c].pass}/${s.byCheck[c].total}`).join(" | ") + " |");
 }
 
 console.log("\n| Model | Avg output tokens | Input read from cache | Cost per correct check |");
 console.log("|---|---|---|---|");
 for (const s of stats) {
-  console.log(`| ${name(s.model)} | ${Math.round(s.avgOutputTokens)} | ${pct(s.cacheReadShare)} | ${usd(s.costPerCorrectCheck, 5)} |`);
+  console.log(`| ${label(s)} | ${Math.round(s.avgOutputTokens)} | ${pct(s.cacheReadShare)} | ${usd(s.costPerCorrectCheck, 5)} |`);
 }
 
 console.log("\nMisses (ticket: runs missed of total, checks):");
 for (const s of stats) {
   const m = Object.entries(s.misses).sort(([a], [b]) => a.localeCompare(b));
-  console.log(`- ${name(s.model)}: ${m.length ? m.map(([id, x]) => `${id} ${x.runs}/${s.runs} (${x.checks.join(", ")})`).join("; ") : "none"}`);
+  console.log(`- ${label(s)}: ${m.length ? m.map(([id, x]) => `${id} ${x.runs}/${s.runs} (${x.checks.join(", ")})`).join("; ") : "none"}`);
 }

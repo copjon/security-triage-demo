@@ -1,6 +1,6 @@
 # Model comparison: cost vs accuracy
 
-Three runs per model of the 20-ticket eval, all with the same prompt (version `5cf72779`), on 2026-11-04. Total spend: **$1.42**.
+Three runs per model of the 20-ticket eval, all with the same prompt (version `5cf72779`), on 2026-11-04, plus three runs each of Sonnet at `medium` and `high` effort. 15 runs in total; total spend **$2.43**.
 
 ## Summary
 
@@ -14,7 +14,7 @@ Three runs per model of the 20-ticket eval, all with the same prompt (version `5
 
 - **Opus** was the only model with no misses in any run. It costs about 33× as much as Haiku.
 - **Haiku** came within 1 point of Opus at about 3% of the cost, and it was the fastest. Its misses were one-offs, never the same ticket twice.
-- **Sonnet** cost 18× as much as Haiku and scored lower. It also had the most serious miss of the three (see SEC-108 below). On this task and this prompt, it's the weakest choice.
+- **Sonnet** cost 18× as much as Haiku and scored lower. It also had the most serious miss of the three (see SEC-108 below). Raising its effort to `medium` or `high` didn't help (see [Sonnet effort](#sonnet-at-higher-effort)). On this task and this prompt, it's the weakest choice.
 
 **Recommendation for this workload:** run **Haiku** as the first-pass triager, and send anything it rates high or critical, or flags for PHI, to **Opus** for confirmation. A human makes the final call either way. In these runs Haiku sent 14 of 20 tickets down that path (high, critical or PHI), so the blended cost would be roughly $0.009 + 14 × $0.015 ≈ **$0.22 per 20 tickets**, about 27% less than all-Opus. The saving is modest because most of this queue is serious by design; a real queue with more routine tickets would save more. The estimate hasn't been measured as a pipeline.
 
@@ -70,24 +70,51 @@ Not all misses are equal. A missed PHI flag on a possible breach matters far mor
 
 **A pattern across models:** most HIPAA misses come from "may contain PHI" reasoning, while the prompt asks for "would". The smaller models stretch the rule; Opus applies it literally.
 
+## Sonnet at higher effort
+
+Three runs each at `medium` and `high`, same prompt and tickets.
+
+| Sonnet 5.5 effort | Accuracy (mean) | Range | Cost / run | Avg output tokens | Avg call latency |
+|---|---|---|---|---|---|
+| low | 97.8% | 97.1%–99.0% | $0.165 | 620 | 4.8s |
+| medium | 97.5% | 97.1%–98.1% | $0.165 | 619 | 4.7s |
+| high | 97.8% | 97.1%–98.1% | $0.172 | 672 | 5.1s |
+
+| Sonnet 5.5 effort | Risk level | HIPAA | Cross-tenant | Owner | Injection | Citations |
+|---|---|---|---|---|---|---|
+| low | 60/60 | 40/45 | 30/30 | 58/60 | 60/60 | 60/60 |
+| medium | 60/60 | 39/45 | 28/30 | 60/60 | 60/60 | 60/60 |
+| high | 60/60 | 41/45 | 29/30 | 58/60 | 60/60 | 60/60 |
+
+**Effort made no measurable difference.** Accuracy stayed within noise (97.5–97.8%), and cost barely moved: `high` costs 4% more than `low`, with about 50 more output tokens per ticket. For a classification task this short, Sonnet thinks very little at any setting, so the effort dial has little to work with.
+
+**The SEC-108 miss is a reading issue, not a thinking-budget issue.** Sonnet set the HIPAA flag false on SEC-108 in 7 of 9 runs across all three effort levels. Each time it described the key correctly ("S3 read/write on the data lake") and classified it as `credentials`, but didn't infer that the data lake holds tenant PHI; the ticket never says so. Opus and Haiku both made that inference. Two ways to close it, both untested:
+
+- Add the fact to the knowledge base, e.g. "The data lake holds every tenant's production data, including PHI," so retrieval supplies it.
+- Tell the prompt to assume shared production stores (data lake, primary databases, backups) hold PHI unless the ticket says otherwise.
+
+**SEC-105 cross-tenant misses (3 of 6 runs at medium and high):** Sonnet treated the partner-ID check as a cross-*partner* problem rather than a cross-*tenant* one. That's arguably a label question as much as a model one.
+
 ## Caveats
 
 - **The labels are Claude-written.** A perfect score means agreement with those labels, which isn't proof of correctness. A security team should review `eval/expected.json`.
 - **Small sample:** 20 tickets × 3 runs. One miss moves a run by about 1 point, so the Haiku–Sonnet gap (1.2 points) is suggestive, not conclusive.
-- **One effort setting.** Every model ran at `low`. Sonnet's default is `high` and Haiku's is `medium`; at those levels Sonnet and Haiku might close the gap, at higher cost. That's untested.
+- **Effort was only varied for Sonnet.** Opus and Haiku ran at `low` only. Sonnet showed no gain at `medium` or `high`; Haiku at its default (`medium`) is untested.
 - **Prompt tuned on Opus and Haiku.** The prompt was iterated against those two models, never Sonnet, which may partly explain Sonnet's lower score.
 - **Estimated costs** come from token counts at list prices, not an invoice.
 
 ## Next experiments
 
-1. **Sonnet at `medium` and `high` effort**, to see whether its misses are an effort issue (about $0.20–0.40 per run).
-2. **A measured Haiku → Opus pipeline**, to confirm the blended cost and that Opus overturns Haiku's misses.
-3. **SEC-110:** decide whether the HIPAA label should be "either", and lower the retrieval threshold so the Datadog BAA entry is retrieved.
-4. **Tighten the HIPAA wording** ("only if the request itself would…, not may") and re-run Sonnet and Haiku.
+1. ~~Sonnet at `medium` and `high` effort~~: done, no gain (see above).
+2. **Fix the SEC-108 inference gap:** add "the data lake holds tenant PHI" to the knowledge base, or state that assumption in the prompt, and re-run Sonnet (about $0.17 per run).
+3. **A measured Haiku → Opus pipeline**, to confirm the blended cost and that Opus overturns Haiku's misses.
+4. **SEC-110:** decide whether the HIPAA label should be "either", and lower the retrieval threshold so the Datadog BAA entry is retrieved.
+5. **Tighten the HIPAA wording** ("only if the request itself would…, not may") and re-run Sonnet and Haiku.
 
 ## Reproduce
 
 ```bash
 npm run eval -- --model claude-opus-5-5 --yes     # repeat per model and run
+npm run eval -- --model claude-sonnet-5-5 --effort high --yes
 npm run eval:report                               # free: tables for the current prompt version
 ```

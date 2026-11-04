@@ -18,6 +18,8 @@ export interface SavedRun {
 export interface ModelStats {
   key: string; // model · effort · RAG
   model: string;
+  effort: string;
+  rag: boolean;
   runs: number;
   accuracy: { mean: number; min: number; max: number };
   perfectRuns: number;
@@ -80,6 +82,8 @@ export function aggregate(runs: SavedRun[]): ModelStats[] {
     return {
       key,
       model: group[0].model,
+      effort: group[0].effort,
+      rag: group[0].useRag,
       runs: group.length,
       accuracy: { mean: mean(rates), min: Math.min(...rates), max: Math.max(...rates) },
       perfectRuns: rates.filter((r) => r === 1).length,
